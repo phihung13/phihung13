@@ -3,6 +3,10 @@
     {
       "kind": "flood",
       "seed": 1
+    },
+    {
+      "kind": "earthquake",
+      "seed": 2
     }
   ]
 }
