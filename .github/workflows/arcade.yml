@@ -1,0 +1,32 @@
+name: Generate Arcade Contribution Graph
+
+on:
+  schedule:
+    - cron: "30 */6 * * *"
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+
+    steps:
+      - name: Generate Pac-Man contribution SVGs
+        uses: abozanona/pacman-contribution-graph@main
+        with:
+          github_user_name: ${{ github.repository_owner }}
+          games: "pacman"
+
+      # separate branch so it never overwrites the snake output
+      - name: Push to output-arcade branch
+        uses: crazy-max/ghaction-github-pages@v4
+        with:
+          target_branch: output-arcade
+          build_dir: dist
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

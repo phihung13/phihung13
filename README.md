@@ -10,6 +10,10 @@
 </div>
 
 <div align="center">
+  <img width="86%" src="https://raw.githubusercontent.com/phihung13/phihung13/main/assets/hero.svg" alt="deploying agent terminal"/>
+</div>
+
+<div align="center">
   <img src="https://komarev.com/ghpvc/?username=phihung13&label=Profile%20views&color=36BCF7&style=flat-square" alt="views"/>
   <img src="https://img.shields.io/github/followers/phihung13?label=Followers&style=flat-square&color=36BCF7" alt="followers"/>
   <img src="https://img.shields.io/badge/Focus-AI%20%2F%20Automation-36BCF7?style=flat-square" alt="focus"/>
@@ -117,8 +121,27 @@ class PhiHung:
   <img src="https://github-profile-trophy.vercel.app/?username=phihung13&theme=tokyonight&no-frame=true&no-bg=true&column=7&margin-w=6&margin-h=6" alt="trophies"/>
 </div>
 
-<!-- ═══════════════════ SNAKE ═══════════════════ -->
-## 🐍 Contribution Snake
+<!-- ═══════════════════ 3D CITY ═══════════════════ -->
+## 🏙️ My Contributions, in 3D
+
+<div align="center">
+  <img width="95%" src="https://raw.githubusercontent.com/phihung13/phihung13/main/profile-3d-contrib/profile-night-rainbow.svg" alt="3d contribution city"/>
+</div>
+
+<!-- ═══════════════════ ARCADE ═══════════════════ -->
+## 🕹️ Arcade Zone
+
+**Pac-Man is eating my commits** — ghosts included.
+
+<div align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/phihung13/phihung13/output-arcade/pacman-contribution-graph-dark.svg" />
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/phihung13/phihung13/output-arcade/pacman-contribution-graph.svg" />
+    <img alt="pac-man eating my contributions" src="https://raw.githubusercontent.com/phihung13/phihung13/output-arcade/pacman-contribution-graph.svg" />
+  </picture>
+</div>
+
+**And a snake, because why not.**
 
 <div align="center">
   <picture>
@@ -126,6 +149,14 @@ class PhiHung:
     <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/phihung13/phihung13/output/snake.svg" />
     <img alt="snake eating my contributions" src="https://raw.githubusercontent.com/phihung13/phihung13/output/snake.svg" />
   </picture>
+</div>
+
+<!-- ═══════════════════ METRICS ═══════════════════ -->
+## 🧭 Deep Metrics
+
+<div align="center">
+  <img width="49%" src="https://raw.githubusercontent.com/phihung13/phihung13/main/metrics/metrics.svg" alt="metrics"/>
+  <img width="49%" src="https://raw.githubusercontent.com/phihung13/phihung13/main/metrics/isocalendar.svg" alt="isocalendar"/>
 </div>
 
 <!-- ═══════════════════ CONTACT ═══════════════════ -->

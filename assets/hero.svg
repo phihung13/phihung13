@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 270" width="820" height="270" role="img" aria-label="Terminal deploying an AI agent">
+  <title>phihung@ai — deploying agent</title>
+
+  <defs>
+    <linearGradient id="glow" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#36BCF7"/>
+      <stop offset="50%" stop-color="#7C3AED"/>
+      <stop offset="100%" stop-color="#36BCF7"/>
+      <animateTransform attributeName="gradientTransform" type="rotate"
+        from="0 0.5 0.5" to="360 0.5 0.5" dur="8s" repeatCount="indefinite"/>
+    </linearGradient>
+
+    <linearGradient id="screen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0D1117"/>
+      <stop offset="100%" stop-color="#0B0E14"/>
+    </linearGradient>
+
+    <filter id="softglow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+
+    <!-- one mask per line: a rect whose width grows = characters appearing -->
+    <mask id="m1"><rect class="type l1" x="40" y="0" height="270" fill="#fff"/></mask>
+    <mask id="m2"><rect class="type l2" x="40" y="0" height="270" fill="#fff"/></mask>
+    <mask id="m3"><rect class="type l3" x="40" y="0" height="270" fill="#fff"/></mask>
+    <mask id="m4"><rect class="type l4" x="40" y="0" height="270" fill="#fff"/></mask>
+    <mask id="m5"><rect class="type l5" x="40" y="0" height="270" fill="#fff"/></mask>
+
+    <style>
+      .mono { font-family: 'Fira Code', 'JetBrains Mono', 'SF Mono', Consolas, monospace; }
+      .type { width: 0px; }
+
+      /* 14s master cycle — each line types, holds, then clears */
+      .l1 { animation: t1 14s steps(34) infinite; }
+      .l2 { animation: t2 14s steps(30) infinite; }
+      .l3 { animation: t3 14s steps(30) infinite; }
+      .l4 { animation: t4 14s steps(26) infinite; }
+      .l5 { animation: t5 14s steps(38) infinite; }
+
+      @keyframes t1 { 0%,3.5%{width:0} 14.3%,89.3%{width:740px} 89.4%,100%{width:0} }
+      @keyframes t2 { 0%,15.7%{width:0} 26.4%,89.3%{width:740px} 89.4%,100%{width:0} }
+      @keyframes t3 { 0%,27.9%{width:0} 38.6%,89.3%{width:740px} 89.4%,100%{width:0} }
+      @keyframes t4 { 0%,40%{width:0}   61.4%,89.3%{width:740px} 89.4%,100%{width:0} }
+      @keyframes t5 { 0%,62.9%{width:0} 73.6%,89.3%{width:740px} 89.4%,100%{width:0} }
+
+      .caret { animation: blink 1s steps(1) infinite; }
+      @keyframes blink { 0%,49%{opacity:1} 50%,100%{opacity:0} }
+
+      .scan { animation: sweep 6s linear infinite; }
+      @keyframes sweep { 0%{transform:translateY(0)} 100%{transform:translateY(270px)} }
+
+      @media (prefers-reduced-motion: reduce) {
+        .type { width: 740px; animation: none; }
+        .caret, .scan { animation: none; }
+      }
+    </style>
+  </defs>
+
+  <!-- animated gradient frame -->
+  <rect x="2" y="2" width="816" height="266" rx="14" fill="url(#glow)" opacity="0.9"/>
+  <rect x="4" y="4" width="812" height="262" rx="12" fill="url(#screen)"/>
+
+  <!-- title bar -->
+  <rect x="4" y="4" width="812" height="34" rx="12" fill="#161B22"/>
+  <rect x="4" y="30" width="812" height="8" fill="#161B22"/>
+  <circle cx="26" cy="21" r="6" fill="#FF5F56"/>
+  <circle cx="46" cy="21" r="6" fill="#FFBD2E"/>
+  <circle cx="66" cy="21" r="6" fill="#27C93F"/>
+  <text class="mono" x="92" y="26" font-size="13" fill="#6E7681">phihung@ai — ~/agents</text>
+
+  <!-- typed lines -->
+  <g class="mono" font-size="16">
+    <text x="40" y="76" fill="#C9D1D9" mask="url(#m1)">
+      <tspan fill="#3FB950">$</tspan> ./deploy_agent.sh --model opus
+    </text>
+    <text x="40" y="108" fill="#8B949E" mask="url(#m2)">
+      <tspan fill="#36BCF7">[✓]</tspan> vision pipeline loaded
+    </text>
+    <text x="40" y="140" fill="#8B949E" mask="url(#m3)">
+      <tspan fill="#36BCF7">[✓]</tspan> Zalo + n8n connected
+    </text>
+    <text x="40" y="172" fill="#8B949E" mask="url(#m4)">
+      <tspan fill="#7C3AED">▓▓▓▓▓▓▓▓▓▓▓▓</tspan> 100%
+    </text>
+    <text x="40" y="204" fill="#C9D1D9" mask="url(#m5)" filter="url(#softglow)">
+      <tspan fill="#3FB950">✔</tspan> agent online — automating the boring.
+    </text>
+
+    <!-- prompt + blinking caret -->
+    <text x="40" y="238" font-size="16" fill="#3FB950">$</text>
+    <rect class="caret" x="56" y="226" width="9" height="16" fill="#36BCF7"/>
+  </g>
+
+  <!-- scanline sweep -->
+  <rect class="scan" x="4" y="0" width="812" height="2" fill="#36BCF7" opacity="0.12"/>
+</svg>
