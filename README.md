@@ -1,9 +1,9 @@
-<p align="center">
+﻿<p align="center">
   <img src="https://raw.githubusercontent.com/phihung13/phihung13/main/assets/saigon.svg" alt="Sài Gòn, isometric pixel art — motorbikes, traffic lights, tin roofs, rooftop water drums" width="100%"/>
 </p>
 
 <p align="center">
-  <a href="https://phihung13.github.io/phihung13/"><b>▶ CHƠI NGAY — phá thành phố này bằng một cú click</b></a><br/>
+  <a href="https://phihung13.github.io/"><b>▶ CHƠI NGAY — phá thành phố này bằng một cú click</b></a><br/>
   <sub>Bấm là nổ liền: động đất rung màn hình, sét loè sáng, tên lửa bay tới. Bấm thẳng lên bản đồ để chọn điểm rơi.</sub>
 </p>
 
