@@ -11,6 +11,10 @@
     {
       "kind": "war",
       "seed": 3
+    },
+    {
+      "kind": "lightning",
+      "seed": 4
     }
   ]
 }
