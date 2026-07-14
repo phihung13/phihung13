@@ -3,8 +3,13 @@
 </p>
 
 <p align="center">
-  <b>Bấm một nút — thành phố này sẽ hứng chịu.</b><br/>
-  <sub>Thiệt hại là vĩnh viễn và ai vào cũng thấy, cho tới khi có người bấm Xây lại. Chờ ~1 phút rồi tải lại trang.</sub>
+  <a href="https://phihung13.github.io/phihung13/"><b>▶ CHƠI NGAY — phá thành phố này bằng một cú click</b></a><br/>
+  <sub>Bấm là nổ liền: động đất rung màn hình, sét loè sáng, tên lửa bay tới. Bấm thẳng lên bản đồ để chọn điểm rơi.</sub>
+</p>
+
+<p align="center">
+  <b>Hoặc để lại dấu vết vĩnh viễn ngay trên trang này:</b><br/>
+  <sub>Các nút dưới đây phá thật — ai vào cũng thấy, cho tới khi có người bấm Xây lại. Chờ ~1 phút rồi tải lại trang.</sub>
 </p>
 
 <p align="center">
