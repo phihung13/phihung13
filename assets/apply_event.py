@@ -9,10 +9,12 @@ the same damage — and the whole map stays reproducible from state.json alone.
 """
 import json
 import os
+import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 STATE_PATH = os.path.join(HERE, "state.json")
+README_PATH = os.path.join(os.path.dirname(HERE), "README.md")
 
 # the headlines carry emoji; on a cp1252 console printing them would raise and fail the job
 if hasattr(sys.stdout, "reconfigure"):
@@ -50,6 +52,21 @@ def main():
     with open(STATE_PATH, "w", encoding="utf-8") as f:
         json.dump(state, f, ensure_ascii=False, indent=2)
         f.write("\n")
+
+    # Bump the ?v= on the banner. Without this the reader keeps seeing the OLD map: GitHub and
+    # the browser both cache raw.githubusercontent.com for minutes, and the URL never changed.
+    version = state.get("version", 0) + 1
+    state["version"] = version
+    with open(STATE_PATH, "w", encoding="utf-8") as f:
+        json.dump(state, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+
+    if os.path.exists(README_PATH):
+        with open(README_PATH, encoding="utf-8") as f:
+            readme = f.read()
+        readme = re.sub(r"(assets/saigon\.svg)(\?v=\d+)?", rf"\1?v={version}", readme, count=1)
+        with open(README_PATH, "w", encoding="utf-8") as f:
+            f.write(readme)
 
     # hand these back to the workflow so it can reply on the issue
     print(f"ignored=false")

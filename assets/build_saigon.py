@@ -241,18 +241,25 @@ def on_screen_cell(gx, gy):
 for ev in EVENTS:
     kind, seed = ev.get("kind", ""), int(ev.get("seed", 1))
 
-    if kind == "earthquake":                    # ĐỘNG ĐẤT: sập rải rác + nứt đường
-        for c in pick_cells(seed, 9):
-            collapsed.add(c)
-        for c in pick_cells(seed + 31, 7, want_road=True):
+    if kind == "earthquake":                    # ĐỘNG ĐẤT: sập cả cụm + nứt đường
+        # a quake tears through in a line, and takes the neighbours with it — a handful of
+        # scattered ruins in a city of 500 houses was invisible from README size
+        for (ex, ey) in pick_cells(seed, 6):
+            collapsed.add((ex, ey))
+            for dx, dy in ((1, 0), (0, 1), (-1, 0), (0, -1)):
+                nx, ny = ex + dx, ey + dy
+                if 0 <= nx < GRID and 0 <= ny < GRID and not road[ny][nx] \
+                        and (dx + dy + seed) % 2 == 0:
+                    collapsed.add((nx, ny))
+        for c in pick_cells(seed + 31, 14, want_road=True):
             cracked.add(c)
 
-    elif kind == "lightning":                   # SẤM SÉT: vài nhà trúng sét, cháy đen
-        for c in pick_cells(seed + 7, 4):
+    elif kind == "lightning":                   # SẤM SÉT: nhà trúng sét, cháy đen bốc khói
+        for c in pick_cells(seed + 7, 8):
             charred.add(c)
 
     elif kind == "war":                         # TÊN LỬA: hố bom + san phẳng quanh điểm rơi
-        for (ex, ey) in pick_cells(seed + 13, 2):
+        for (ex, ey) in pick_cells(seed + 13, 3):
             craters.add((ex, ey))
             for dx in (-1, 0, 1):
                 for dy in (-1, 0, 1):
