@@ -11,15 +11,30 @@ Two things worth knowing:
    what it destroys is derived deterministically from that seed. So the map can always be rebuilt
    from scratch, and "reset" simply means throwing the event list away.
 """
+import base64
 import io
 import json
 import math
 import os
 from collections import defaultdict
 
+from PIL import Image, ImageDraw
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 STATE_PATH = os.path.join(HERE, "state.json")
 OUT_PATH = os.path.join(HERE, "saigon.svg")
+
+# ═══ WHY THIS IS A HYBRID ════════════════════════════════════════════
+# A pure-vector city was 27,000 shapes. Any SMIL animation forces the browser to re-rasterise
+# the WHOLE image every frame, so a dozen moving motorbikes dragged 27,000 shapes with them and
+# the page crawled.
+#
+# So: the static city (houses, roads, trees) is painted straight to BITMAP with Pillow, sliced
+# into depth BANDS. Only the things that actually move stay vector. The browser then composites
+# a handful of pre-rendered strips plus a few hundred tiny shapes per frame.
+# Vehicles are emitted between the bands, so houses in front still cover them.
+SS = 2                      # supersample, then downscale — gives clean anti-aliased edges
+BAND_DEPTHS = 4             # how many grid depths get flattened into one bitmap strip
 
 TW, TH, ZH = 104, 66, 25          # bigger blocks: fewer of them, and detail survives downscaling
 # the iso diamond must be big enough to cover the RECTANGLE's corners, not just its middle:
@@ -64,9 +79,44 @@ SMOKE = "#b9b3a8"
 
 road = [[False] * GRID for _ in range(GRID)]
 taken = [[False] * GRID for _ in range(GRID)]
-layers = defaultdict(io.StringIO)      # depth bucket -> svg fragments
-head = io.StringIO()
-tail = io.StringIO()
+
+NBANDS = (2 * GRID) // BAND_DEPTHS + 2
+_bitmaps, _draws = [], []
+for _ in range(NBANDS):
+    im = Image.new("RGBA", (CW * SS, CH * SS), (0, 0, 0, 0))
+    _bitmaps.append(im)
+    _draws.append(ImageDraw.Draw(im, "RGBA"))   # "RGBA" mode = alpha BLENDING, not overwrite
+
+
+def rgba(hexcol, op=1.0):
+    h = hexcol.lstrip("#")
+    return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16), int(max(0.0, min(1.0, op)) * 255))
+
+
+class Layer:
+    """One depth band: a bitmap for everything that stands still, SVG for everything that moves."""
+
+    def __init__(self, band):
+        self.band = min(max(band, 0), NBANDS - 1)
+        self.svg = io.StringIO()
+
+    def write(self, s):                 # animated / text bits stay as SVG
+        self.svg.write(s)
+
+    @property
+    def draw(self):
+        return _draws[self.band]
+
+
+head = Layer(0)
+_layers = {}
+
+
+def layer(depth):
+    key = min(max(depth, 0), 2 * GRID - 1)
+    if key not in _layers:
+        _layers[key] = Layer(key // BAND_DEPTHS)
+    return _layers[key]
 
 
 def rnd(s, n):
@@ -83,16 +133,21 @@ def mid(gx, gy, w=1, d=1):
 
 
 def P(buf, pts, fill, op=None):
-    d = " ".join(f"{x:.0f},{y:.0f}" for x, y in pts)     # integers keep the file small
-    o = f' opacity="{op}"' if op else ""
-    buf.write(f'<polygon points="{d}" fill="{fill}"{o}/>')
+    buf.draw.polygon([(x * SS, y * SS) for x, y in pts], fill=rgba(fill, 1.0 if op is None else op))
 
 
 def L(buf, p, q, c, w=1, op=1.0):
-    sw = "" if w == 1 else f' stroke-width="{w}"'        # 1 is the default — don't write it
-    o = "" if op >= 1 else f' opacity="{op}"'
-    buf.write(f'<line x1="{p[0]:.0f}" y1="{p[1]:.0f}" x2="{q[0]:.0f}" y2="{q[1]:.0f}" '
-              f'stroke="{c}"{sw}{o}/>')
+    buf.draw.line([(p[0] * SS, p[1] * SS), (q[0] * SS, q[1] * SS)],
+                  fill=rgba(c, op), width=max(1, int(w * SS)))
+
+
+def RECT(buf, x, y, w, h, fill, op=1.0):
+    buf.draw.rectangle([x * SS, y * SS, (x + w) * SS, (y + h) * SS], fill=rgba(fill, op))
+
+
+def ELL(buf, cx, cy, rx, ry, fill, op=1.0):
+    buf.draw.ellipse([(cx - rx) * SS, (cy - ry) * SS, (cx + rx) * SS, (cy + ry) * SS],
+                     fill=rgba(fill, op))
 
 
 def fp(A, B, u, v):
@@ -241,31 +296,8 @@ def occupy(gx, gy, w, d):
             taken[y][x] = True
 
 
-# ═══ sky, slab, ground (all behind everything) ═══════════════════════
-head.write(
-    f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {CW} {CH}" width="{CW}" height="{CH}" '
-    f'role="img" aria-label="Isometric pixel art of a Saigon neighbourhood">\n'
-    f'<title>SAIGON — 8,000,000 concurrent workers, mostly on two wheels</title>\n'
-    f'<defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">'
-    f'<stop offset="0%" stop-color="#a7c4da"/><stop offset="55%" stop-color="#d2dfe6"/>'
-    f'<stop offset="100%" stop-color="#ecdcc2"/></linearGradient></defs>\n'
-    f'<rect width="{CW}" height="{CH}" fill="url(#sky)"/>\n'
-    f'<circle cx="1160" cy="80" r="32" fill="#f7e6c6" opacity="0.85"/>\n'
-    f'<g opacity="0.22">'
-    f'<rect x="960" y="10" width="30" height="150" fill="#8fa6ba"/>'
-    f'<rect x="971" y="-6" width="5" height="16" fill="#8fa6ba"/>'
-    f'<rect x="1020" y="54" width="34" height="106" fill="#9db2c4"/>'
-    f'<rect x="1010" y="68" width="54" height="6" fill="#9db2c4"/>'
-    f'<rect x="180" y="60" width="38" height="100" fill="#a8b8c6"/>'
-    f'<rect x="120" y="88" width="28" height="72" fill="#b0bfcb"/></g>\n'
-)
-for cyy, cw, dur, dl in ((34, 120, 170, 0), (96, 80, 220, -90)):
-    head.write(
-        f'<g opacity="0.7"><animateTransform attributeName="transform" type="translate" '
-        f'values="-{cw+100} 0;{CW+cw} 0" dur="{dur}s" begin="{dl}s" repeatCount="indefinite"/>'
-        f'<rect x="0" y="{cyy}" width="{cw}" height="14" fill="#f2ede1"/>'
-        f'<rect x="20" y="{cyy-10}" width="{cw-50}" height="10" fill="#f2ede1"/></g>\n'
-    )
+# The sky and its clouds are gone: the city now fills the frame edge to edge, so they were
+# painted underneath the ground — invisible, but still animating and still costing frames.
 
 def on_screen(gx, gy):
     """is this cell anywhere near the frame? everything else is skipped"""
@@ -273,7 +305,7 @@ def on_screen(gx, gy):
     return -MARGIN < x < CW + MARGIN and -MARGIN < y < CH + MARGIN
 
 
-head.write(f'<rect width="{CW}" height="{CH}" fill="{DIRT}"/>\n')   # the city bleeds off every edge
+RECT(head, 0, 0, CW, CH, DIRT)                                        # the city bleeds off every edge
 
 for gy in range(GRID):
     for gx in range(GRID):
@@ -317,8 +349,8 @@ for gx, gy, k in ((7, 6, 0), (5, 10, 1), (12, 9, 0), (8, 21, 1), (16, 4, 0), (17
         continue
     c = mid(gx, gy)
     if k == 0:
-        head.write(f'<ellipse cx="{c[0]:.0f}" cy="{c[1]:.0f}" rx="9" ry="6" fill="#54504a"/>'
-                   f'<ellipse cx="{c[0]:.0f}" cy="{c[1]:.0f}" rx="6" ry="4" fill="#605b54"/>')
+        ELL(head, c[0], c[1], 9, 6, "#54504a")
+        ELL(head, c[0], c[1], 6, 4, "#605b54")
     else:
         P(head, [(c[0] - 10, c[1]), (c[0], c[1] - 6), (c[0] + 10, c[1]), (c[0], c[1] + 6)], "#4f4b45")
         for t in range(-2, 3):
@@ -518,18 +550,17 @@ def house(buf, gx, gy, w, d, seed, kind="house", burnt=False):
             dx, dy = rc[0] + 16 + k * 13, rcy - 4 + k * 5
             c = DRUM[rnd(seed + k * 3, len(DRUM))]
             P(buf, [(dx, dy), (dx + 6, dy - 3), (dx + 12, dy), (dx + 6, dy + 3)], "#c9c2b0")
-            buf.write(f'<rect x="{dx:.0f}" y="{dy:.0f}" width="12" height="14" fill="{c}"/>')
+            RECT(buf, dx, dy, 12, 14, c)
             L(buf, (dx, dy + 5), (dx + 12, dy + 5), "#2f2b27", 1, 0.35)
         if rnd(seed + 9, 2):                                # vườn sân thượng
             for k in range(3):
                 px, py = rc[0] - 30 + k * 11, rcy + 6 - k * 4
-                buf.write(f'<rect x="{px:.0f}" y="{py:.0f}" width="8" height="6" fill="#a26f4c"/>'
-                          f'<rect x="{px-1:.0f}" y="{py-7:.0f}" width="10" height="8" fill="{TREE}"/>')
+                RECT(buf, px, py, 8, 6, "#a26f4c")
+                RECT(buf, px - 1, py - 7, 10, 8, TREE)
         if rnd(seed + 11, 2):                               # dây phơi
             L(buf, (rc[0] - 28, rcy + 2), (rc[0] + 2, rcy - 14), RAIL, 1, 0.9)
             for k, c in enumerate(("#c05a4a", "#e8e4d6", "#5f86a8", "#d8c48f")):
-                buf.write(f'<rect x="{rc[0]-26+k*7:.0f}" y="{rcy+1-k*3.7:.0f}" width="5" '
-                          f'height="{9+k%2}" fill="{c}"/>')
+                RECT(buf, rc[0] - 26 + k * 7, rcy + 1 - k * 3.7, 5, 9 + k % 2, c)
         if rnd(seed + 17, 3) == 0:
             L(buf, (rc[0] - 22, rcy - 6), (rc[0] - 22, rcy - 32), RAIL, 1)
             L(buf, (rc[0] - 27, rcy - 27), (rc[0] - 17, rcy - 27), RAIL, 1)
@@ -549,10 +580,10 @@ def house(buf, gx, gy, w, d, seed, kind="house", burnt=False):
     if kind == "gov":
         fx0, fy0 = rc[0], rcy - 8
         L(buf, (fx0, fy0), (fx0, fy0 - 40), RAIL, 2)
-        buf.write(f'<rect x="{fx0:.0f}" y="{fy0-40:.0f}" width="26" height="17" fill="#c8322c"/>'
-                  f'<text x="{fx0+13:.0f}" y="{fy0-27:.0f}" font-size="12" fill="#f2d64b" '
-                  f'text-anchor="middle">★</text>'
-                  f'<text x="{rc[0]:.0f}" y="{rcy+34:.0f}" font-family="monospace" font-size="9" '
+        RECT(buf, fx0, fy0 - 40, 26, 17, "#c8322c")                     # cờ đỏ
+        P(buf, [(fx0 + 13, fy0 - 37), (fx0 + 17, fy0 - 26), (fx0 + 8, fy0 - 32),   # sao vàng
+                (fx0 + 18, fy0 - 32), (fx0 + 9, fy0 - 26)], "#f2d64b")
+        buf.write(f'<text x="{rc[0]:.0f}" y="{rcy+34:.0f}" font-family="monospace" font-size="9" '
                   f'fill="#5d5647" text-anchor="middle">UBND PHUONG</text>')
 
 
@@ -576,15 +607,15 @@ def ben_thanh(buf, gx, gy):
         a = (up(S)[0] + (up(E)[0] - up(S)[0]) * k / 9, up(S)[1] + (up(E)[1] - up(S)[1]) * k / 9)
         L(buf, a, apex, "#b56a4f", 1, 0.3)
     tcx, tcy = apex[0], apex[1] + 8
-    buf.write(f'<rect x="{tcx-16:.0f}" y="{tcy-56:.0f}" width="32" height="56" fill="#e6d0a0"/>'
-              f'<rect x="{tcx+4:.0f}" y="{tcy-56:.0f}" width="12" height="56" fill="#c9b183"/>')
+    RECT(buf, tcx - 16, tcy - 56, 32, 56, "#e6d0a0")                    # tháp đồng hồ
+    RECT(buf, tcx + 4, tcy - 56, 12, 56, "#c9b183")
     P(buf, [(tcx - 20, tcy - 56), (tcx + 20, tcy - 56), (tcx, tcy - 82)], "#7d3d2c")
-    buf.write(f'<circle cx="{tcx-2:.0f}" cy="{tcy-36:.0f}" r="10" fill="#f6f1e2" stroke="#4a453d" '
-              f'stroke-width="2"/>'
-              f'<line x1="{tcx-2:.0f}" y1="{tcy-36:.0f}" x2="{tcx-2:.0f}" y2="{tcy-44:.0f}" '
-              f'stroke="#4a453d" stroke-width="2">'
+    ELL(buf, tcx - 2, tcy - 36, 11, 11, "#4a453d")                     # mặt đồng hồ
+    ELL(buf, tcx - 2, tcy - 36, 9, 9, "#f6f1e2")
+    buf.write(f'<line x1="{tcx-2:.0f}" y1="{tcy-36:.0f}" x2="{tcx-2:.0f}" y2="{tcy-44:.0f}" '
+              f'stroke="#4a453d" stroke-width="2">'                  # kim đồng hồ: thứ duy nhất động
               f'<animateTransform attributeName="transform" type="rotate" '
-              f'from="0 {tcx-2:.0f} {tcy-36:.0f}" to="360 {tcx-2:.0f} {tcy-36:.0f}" dur="30s" '
+              f'from="0 {tcx-2:.0f} {tcy-36:.0f}" to="360 {tcx-2:.0f} {tcy-36:.0f}" dur="24s" '
               f'repeatCount="indefinite"/></line>'
               f'<text x="{tcx:.0f}" y="{tcy+26:.0f}" font-family="monospace" font-size="10" '
               f'fill="#5d5647" text-anchor="middle">CHO BEN THANH</text>')
@@ -604,7 +635,7 @@ def tower(buf, gx, gy):
         for A, B, sh in ((S, E, None), (W, S, 0.9)):
             panel(buf, A, B, 0.12, 0.88, v, v + 10, "#5f7f99", sh)
     c = mid(gx, gy)
-    buf.write(f'<rect x="{c[0]-3:.0f}" y="{c[1]-h-34:.0f}" width="5" height="34" fill="#8fa6ba"/>')
+    RECT(buf, c[0] - 3, c[1] - h - 34, 5, 34, "#8fa6ba")
 
 
 def park(buf, gx, gy, w=2, d=2):
@@ -619,17 +650,15 @@ def park(buf, gx, gy, w=2, d=2):
     P(buf, [(c[0] - 20, c[1] + 12), (c[0] - 2, c[1] + 3), (c[0] + 16, c[1] + 12),
             (c[0] - 2, c[1] + 21)], "#79a0b8", 0.6)
     for bx, by in ((c[0] - 40, c[1] - 6), (c[0] + 26, c[1] - 2)):     # ghế đá
-        buf.write(f'<rect x="{bx:.0f}" y="{by:.0f}" width="20" height="4" fill="#b6ae9c"/>'
-                  f'<rect x="{bx:.0f}" y="{by+4:.0f}" width="3" height="5" fill="#8f8878"/>'
-                  f'<rect x="{bx+17:.0f}" y="{by+4:.0f}" width="3" height="5" fill="#8f8878"/>')
+        RECT(buf, bx, by, 20, 4, "#b6ae9c")
+        RECT(buf, bx, by + 4, 3, 5, "#8f8878")
+        RECT(buf, bx + 17, by + 4, 3, 5, "#8f8878")
     for ox, oy, s in ((-34, -26, 1.3), (28, -30, 1.1), (0, -40, 1.0), (36, 14, 0.9)):
         bx, by = c[0] + ox, c[1] + oy
-        buf.write(f'<rect x="{bx:.0f}" y="{by-24*s:.0f}" width="5" height="{24*s:.0f}" fill="{TRUNK}"/>'
-                  f'<rect x="{bx-16*s:.0f}" y="{by-48*s:.0f}" width="{36*s:.0f}" '
-                  f'height="{26*s:.0f}" fill="{TREE}"/>'
-                  f'<rect x="{bx-11*s:.0f}" y="{by-55*s:.0f}" width="{26*s:.0f}" '
-                  f'height="{8*s:.0f}" fill="{TREE}"/>'
-                  f'<rect x="{bx-16*s:.0f}" y="{by-25*s:.0f}" width="{36*s:.0f}" height="3" fill="{TREE_D}"/>')
+        RECT(buf, bx, by - 24 * s, 5, 24 * s, TRUNK)
+        RECT(buf, bx - 16 * s, by - 48 * s, 36 * s, 26 * s, TREE)
+        RECT(buf, bx - 11 * s, by - 55 * s, 26 * s, 8 * s, TREE)
+        RECT(buf, bx - 16 * s, by - 25 * s, 36 * s, 3, TREE_D)
     buf.write(f'<text x="{c[0]:.0f}" y="{c[1]+34:.0f}" font-family="monospace" font-size="9" '
               f'fill="#41502f" text-anchor="middle">CONG VIEN</text>')
 
@@ -646,7 +675,7 @@ occupy(*PARK, 2, 2)
 
 # ═══ buildings, bucketed by depth ════════════════════════════════════
 for depth in range(2 * GRID):
-    buf = layers[depth]
+    buf = layer(depth)
     if depth == MARKET[0] + MARKET[1]:
         ben_thanh(buf, *MARKET)
     if depth == TOWER[0] + TOWER[1]:
@@ -675,10 +704,8 @@ for depth in range(2 * GRID):
             b = mid(gx, gy)
             occupy(gx, gy, 1, 1)
             for ox, oy, s in ((-16, 6, 1.1), (10, -4, 0.8)):
-                buf.write(f'<rect x="{b[0]+ox:.0f}" y="{b[1]+oy-20*s:.0f}" width="4" '
-                          f'height="{20*s:.0f}" fill="{TRUNK}"/>'
-                          f'<rect x="{b[0]+ox-13*s:.0f}" y="{b[1]+oy-40*s:.0f}" width="{30*s:.0f}" '
-                          f'height="{22*s:.0f}" fill="{TREE}"/>')
+                RECT(buf, b[0] + ox, b[1] + oy - 20 * s, 4, 20 * s, TRUNK)
+                RECT(buf, b[0] + ox - 13 * s, b[1] + oy - 40 * s, 30 * s, 22 * s, TREE)
             continue
         shape = rnd(seed + 41, 10)
         w, d = (2, 1) if shape < 2 else ((1, 2) if shape < 4 else (1, 1))
@@ -707,46 +734,46 @@ for gy in range(GRID):
         if road[gy][gx] or not on_screen(gx, gy) \
                 or not (is_road(gx + 1, gy) or is_road(gx, gy + 1)):
             continue
-        buf = layers[gx + gy]
+        buf = layer(gx + gy)
         seed = gx * 13 + gy * 7
         c = mid(gx, gy)
         if rnd(seed + 1, 3) == 0:                                     # cây vỉa hè
             bx, by = c[0] + 20, c[1] + 14
-            buf.write(f'<rect x="{bx:.0f}" y="{by-22:.0f}" width="4" height="22" fill="{TRUNK}"/>'
-                      f'<rect x="{bx-13:.0f}" y="{by-44:.0f}" width="30" height="24" fill="{TREE}"/>'
-                      f'<rect x="{bx-9:.0f}" y="{by-50:.0f}" width="22" height="7" fill="{TREE}"/>'
-                      f'<rect x="{bx-13:.0f}" y="{by-23:.0f}" width="30" height="3" fill="{TREE_D}"/>')
+            RECT(buf, bx, by - 22, 4, 22, TRUNK)
+            RECT(buf, bx - 13, by - 44, 30, 24, TREE)
+            RECT(buf, bx - 9, by - 50, 22, 7, TREE)
+            RECT(buf, bx - 13, by - 23, 30, 3, TREE_D)
         if rnd(seed + 2, 5) == 0:                                     # thùng rác
             bx, by = c[0] - 22, c[1] + 12
-            buf.write(f'<rect x="{bx:.0f}" y="{by-14:.0f}" width="13" height="14" fill="#4a7a52"/>')
+            RECT(buf, bx, by - 14, 13, 14, "#4a7a52")
             P(buf, [(bx, by - 14), (bx + 6, by - 18), (bx + 13, by - 14), (bx + 7, by - 10)], "#5d8f63")
         if rnd(seed + 3, 6) == 0:                                     # xe ba gác đậu
             bx, by = c[0] + 4, c[1] + 22
-            buf.write(f'<rect x="{bx-16:.0f}" y="{by-14:.0f}" width="26" height="10" fill="#8a6a3a"/>'
-                      f'<rect x="{bx-16:.0f}" y="{by-20:.0f}" width="26" height="6" fill="#a8814a"/>'
-                      f'<rect x="{bx+8:.0f}" y="{by-10:.0f}" width="12" height="4" fill="#4a4640"/>'
-                      f'<rect x="{bx-14:.0f}" y="{by-4:.0f}" width="6" height="5" fill="#2f2b27"/>'
-                      f'<rect x="{bx+2:.0f}" y="{by-4:.0f}" width="6" height="5" fill="#2f2b27"/>')
+            RECT(buf, bx - 16, by - 14, 26, 10, "#8a6a3a")
+            RECT(buf, bx - 16, by - 20, 26, 6, "#a8814a")
+            RECT(buf, bx + 8, by - 10, 12, 4, "#4a4640")
+            RECT(buf, bx - 14, by - 4, 6, 5, "#2f2b27")
+            RECT(buf, bx + 2, by - 4, 6, 5, "#2f2b27")
         if rnd(seed + 5, 7) == 0:                                     # gánh hàng rong
             bx, by = c[0] - 6, c[1] + 26
-            buf.write(f'<rect x="{bx:.0f}" y="{by-18:.0f}" width="6" height="12" fill="#c9b48f"/>'
-                      f'<rect x="{bx-1:.0f}" y="{by-24:.0f}" width="8" height="6" fill="#e0c877"/>'  # nón lá
-                      f'<rect x="{bx-14:.0f}" y="{by-14:.0f}" width="34" height="2" fill="#8a7a5f"/>'
-                      f'<rect x="{bx-16:.0f}" y="{by-12:.0f}" width="12" height="6" fill="#b08a52"/>'
-                      f'<rect x="{bx+12:.0f}" y="{by-12:.0f}" width="12" height="6" fill="#b08a52"/>')
+            RECT(buf, bx, by - 18, 6, 12, "#c9b48f")
+            RECT(buf, bx - 1, by - 24, 8, 6, "#e0c877")                  # nón lá
+            RECT(buf, bx - 14, by - 14, 34, 2, "#8a7a5f")                # đòn gánh
+            RECT(buf, bx - 16, by - 12, 12, 6, "#b08a52")
+            RECT(buf, bx + 12, by - 12, 12, 6, "#b08a52")
         if rnd(seed + 6, 8) == 0:                                     # xe bánh mì
             bx, by = c[0] + 14, c[1] + 26
-            buf.write(f'<rect x="{bx-14:.0f}" y="{by-16:.0f}" width="26" height="11" fill="#c78d24"/>'
-                      f'<rect x="{bx-16:.0f}" y="{by-22:.0f}" width="30" height="6" fill="#b03e2c"/>'
-                      f'<rect x="{bx-12:.0f}" y="{by-5:.0f}" width="5" height="5" fill="#2f2b27"/>'
-                      f'<rect x="{bx+4:.0f}" y="{by-5:.0f}" width="5" height="5" fill="#2f2b27"/>')
+            RECT(buf, bx - 14, by - 16, 26, 11, "#c78d24")
+            RECT(buf, bx - 16, by - 22, 30, 6, "#b03e2c")
+            RECT(buf, bx - 12, by - 5, 5, 5, "#2f2b27")
+            RECT(buf, bx + 4, by - 5, 5, 5, "#2f2b27")
 
 # ═══ đèn giao thông + đèn đường (bucketed) ═══════════════════════════
 def traffic_light(gx, gy):
-    buf = layers[gx + gy]
+    buf = layer(gx + gy)
     b = C(gx, gy)
-    L(buf, b, (b[0], b[1] - 62), "#4f4b45", 3)
-    buf.write(f'<rect x="{b[0]-7:.0f}" y="{b[1]-92:.0f}" width="15" height="34" rx="3" fill="#3a3733"/>')
+    L(buf, b, (b[0], b[1] - 62), "#4f4b45", 3)                     # cột: tĩnh → bitmap
+    RECT(buf, b[0] - 7, b[1] - 92, 15, 34, "#3a3733")
     kt = f'0;{RED0};{RED0+0.001};{RED1};{RED1+0.001};1'
     buf.write(f'<circle cx="{b[0]:.0f}" cy="{b[1]-83:.0f}" r="4.5" fill="#c8322c">'
               f'<animate attributeName="opacity" values="0.15;0.15;1;1;0.15;0.15" keyTimes="{kt}" '
@@ -765,14 +792,13 @@ for gx, gy in ((2, 4), (9, 8), (13, 10), (19, 13), (25, 15), (3, 17),
                (14, 22), (21, 25), (22, 7), (7, 13), (11, 17), (18, 20)):
     if not on_screen(gx, gy):
         continue
-    buf = layers[gx + gy]
+    buf = layer(gx + gy)
     b = C(gx + 1, gy + 1)
     L(buf, b, (b[0], b[1] - 58), RAIL, 2)
     L(buf, (b[0], b[1] - 58), (b[0] + 14, b[1] - 62), RAIL, 2)
-    buf.write(f'<rect x="{b[0]+11:.0f}" y="{b[1]-65:.0f}" width="8" height="4" fill="#efe8d4"/>')
-    # rao vặt dán đầy cột đèn
-    buf.write(f'<rect x="{b[0]-5:.0f}" y="{b[1]-34:.0f}" width="9" height="6" fill="#e8e2d0"/>'
-              f'<rect x="{b[0]-4:.0f}" y="{b[1]-24:.0f}" width="8" height="5" fill="#f0d9a8"/>')
+    RECT(buf, b[0] + 11, b[1] - 65, 8, 4, "#efe8d4")
+    RECT(buf, b[0] - 5, b[1] - 34, 9, 6, "#e8e2d0")          # rao vặt dán đầy cột đèn
+    RECT(buf, b[0] - 4, b[1] - 24, 8, 5, "#f0d9a8")
 
 
 # ═══ VEHICLES — sliced by depth so buildings can occlude them ════════
@@ -838,8 +864,9 @@ def emit_traffic(cells, shape_svg, dur, phase, stops_at=None):
             return RED0 * (f / stops_at) if stops_at else 0.0
         return RED1 + (1 - RED1) * (f - stops_at) / (1 - stops_at)
 
-    # walk the lane, cutting whenever the depth bucket changes
-    chunks, cur, cur_d, acc = [], [pts[0]], None, 0.0
+    # Walk the lane, cutting it whenever it crosses into a new BITMAP BAND (not every depth —
+    # that produced 1,278 animated groups and killed the frame rate).
+    chunks, cur, cur_band, acc = [], [pts[0]], None, 0.0
     start_dist = 0.0
     STEP = 6.0
     for (a, b, ln) in segs:
@@ -851,24 +878,25 @@ def emit_traffic(cells, shape_svg, dur, phase, stops_at=None):
             # invert the iso transform to find which cell we're standing in
             gx = ((p[0] - OX) / (TW / 2) + (p[1] - OY) / (TH / 2)) / 2
             gy = ((p[1] - OY) / (TH / 2) - (p[0] - OX) / (TW / 2)) / 2
-            dep = int(math.floor(gx + gy))
-            if cur_d is None:
-                cur_d = dep
-            if dep != cur_d:
+            dep = max(0, min(2 * GRID - 1, int(math.floor(gx + gy))))
+            band = dep // BAND_DEPTHS
+            if cur_band is None:
+                cur_band = band
+            if band != cur_band:
                 cur.append(p)
-                chunks.append((cur_d, cur, start_dist, acc))
-                cur, cur_d, start_dist = [p], dep, acc
+                chunks.append((cur_band, cur, start_dist, acc))
+                cur, cur_band, start_dist = [p], band, acc
             else:
                 cur.append(p)
-    chunks.append((cur_d, cur, start_dist, acc))
+    chunks.append((cur_band, cur, start_dist, acc))
 
-    for dep, poly_pts, d0, d1 in chunks:
+    for band, poly_pts, d0, d1 in chunks:
         if len(poly_pts) < 2 or d1 - d0 < 1:
             continue
         t0, t1 = t_of(d0), t_of(d1)
-        buf = layers[max(0, min(2 * GRID - 1, dep))]
+        buf = layer(band * BAND_DEPTHS)
         path = "M" + " L".join(f"{x:.1f},{y:.1f}" for x, y in poly_pts)
-        pid = f"v{abs(hash((dep, int(d0), int(d1), dur, phase))) % 10**9}"
+        pid = f"v{abs(hash((band, int(d0), int(d1), dur, phase, shape_svg[:24]))) % 10**9}"
         buf.write(f'<path id="{pid}" d="{path}" fill="none" stroke="none"/>')
 
         # SMIL requires keyTimes to span the whole 0..1 — so the vehicle waits at the chunk's
@@ -946,11 +974,44 @@ for k in range(3):
 for k in range(3):
     emit_traffic(alley2, draw_bike(BIKES[(k + 7) % len(BIKES)]), CYCLE * 0.95, -k * 7.6)
 
-# ═══ assemble: depth by depth ════════════════════════════════════════
+# ═══ assemble: bitmap band, then the vectors that move in front of it ════
+def band_png(band):
+    """crop the strip to what it actually covers, downscale, and hand back a data: URI"""
+    im = _bitmaps[band]
+    box = im.getbbox()
+    if box is None:
+        return None
+    x0, y0, x1, y1 = box
+    crop = im.crop(box).resize((max(1, (x1 - x0) // SS), max(1, (y1 - y0) // SS)), Image.LANCZOS)
+    # flat pixel art: a 128-colour palette is indistinguishable and roughly a third of the bytes
+    crop = crop.quantize(colors=128, method=Image.Quantize.FASTOCTREE)
+    raw = io.BytesIO()
+    crop.save(raw, format="PNG", optimize=True)
+    b64 = base64.b64encode(raw.getvalue()).decode("ascii")
+    return (x0 / SS, y0 / SS, crop.width, crop.height, b64)
+
+
 out = io.StringIO()
-out.write(head.getvalue())
-for depth in sorted(layers):
-    out.write(layers[depth].getvalue())
+out.write(
+    f'<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" '
+    f'viewBox="0 0 {CW} {CH}" width="{CW}" height="{CH}" '
+    f'role="img" aria-label="Isometric pixel art of a Saigon neighbourhood">\n'
+    f'<title>SAIGON — 8,000,000 concurrent workers, mostly on two wheels</title>\n'
+)
+
+png_bytes = 0
+for band in range(NBANDS):
+    strip = band_png(band)
+    if strip:
+        x, y, w, h, b64 = strip
+        png_bytes += len(b64)
+        out.write(f'<image x="{x:.0f}" y="{y:.0f}" width="{w}" height="{h}" '
+                  f'image-rendering="auto" xlink:href="data:image/png;base64,{b64}"/>\n')
+    # the vectors that live in this band ride on top of its bitmap
+    for depth in range(band * BAND_DEPTHS, (band + 1) * BAND_DEPTHS):
+        if depth in _layers:
+            out.write(_layers[depth].svg.getvalue())
+
 wrecked = len(collapsed) + len(charred) + len(craters)
 status = (f'SAIGON · nguyen ven · {len(EVENTS)} tham hoa'
           if wrecked == 0 else
@@ -962,8 +1023,12 @@ out.write(
     f'{status} · maintainer: phihung13</text>\n</svg>\n'
 )
 
+svg = out.getvalue()
 with open(OUT_PATH, "w", encoding="utf-8") as f:
-    f.write(out.getvalue())
-print(f"written: {len(out.getvalue())} bytes | events={len(EVENTS)} "
-      f"collapsed={len(collapsed)} charred={len(charred)} craters={len(craters)} "
-      f"cracked={len(cracked)} flooded={len(flooded)}")
+    f.write(svg)
+
+shapes = svg.count("<rect") + svg.count("<polygon") + svg.count("<line") + svg.count("<circle")
+print(f"written: {len(svg)} bytes ({png_bytes//1024} KB of it PNG) | "
+      f"vector shapes left: {shapes} | animations: {svg.count('<animate')} | "
+      f"events={len(EVENTS)} collapsed={len(collapsed)} charred={len(charred)} "
+      f"craters={len(craters)} cracked={len(cracked)} flooded={len(flooded)}")

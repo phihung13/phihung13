@@ -27,6 +27,9 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Install Pillow
+        run: pip install --quiet "pillow>=10"    # the static city is painted to bitmap
+
       - name: Apply the disaster and redraw the city
         id: apply
         env:
