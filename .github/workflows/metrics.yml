@@ -42,3 +42,17 @@ jobs:
           config_timezone: Asia/Ho_Chi_Minh
           plugin_isocalendar: yes
           plugin_isocalendar_duration: full-year
+
+      # replaces github-profile-trophy, whose public instance is dead (HTTP 402)
+      - name: Achievements
+        uses: lowlighter/metrics@latest
+        with:
+          filename: metrics/achievements.svg
+          token: ${{ secrets.GITHUB_TOKEN }}
+          committer_token: ${{ secrets.GITHUB_TOKEN }}
+          user: ${{ github.repository_owner }}
+          base: ""
+          config_timezone: Asia/Ho_Chi_Minh
+          plugin_achievements: yes
+          plugin_achievements_display: compact
+          plugin_achievements_threshold: C

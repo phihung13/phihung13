@@ -20,41 +20,38 @@
       <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
 
-    <!-- one mask per line: a rect whose width grows = characters appearing -->
-    <mask id="m1"><rect class="type l1" x="40" y="0" height="270" fill="#fff"/></mask>
-    <mask id="m2"><rect class="type l2" x="40" y="0" height="270" fill="#fff"/></mask>
-    <mask id="m3"><rect class="type l3" x="40" y="0" height="270" fill="#fff"/></mask>
-    <mask id="m4"><rect class="type l4" x="40" y="0" height="270" fill="#fff"/></mask>
-    <mask id="m5"><rect class="type l5" x="40" y="0" height="270" fill="#fff"/></mask>
-
-    <style>
-      .mono { font-family: 'Fira Code', 'JetBrains Mono', 'SF Mono', Consolas, monospace; }
-      .type { width: 0px; }
-
-      /* 14s master cycle — each line types, holds, then clears */
-      .l1 { animation: t1 14s steps(34) infinite; }
-      .l2 { animation: t2 14s steps(30) infinite; }
-      .l3 { animation: t3 14s steps(30) infinite; }
-      .l4 { animation: t4 14s steps(26) infinite; }
-      .l5 { animation: t5 14s steps(38) infinite; }
-
-      @keyframes t1 { 0%,3.5%{width:0} 14.3%,89.3%{width:740px} 89.4%,100%{width:0} }
-      @keyframes t2 { 0%,15.7%{width:0} 26.4%,89.3%{width:740px} 89.4%,100%{width:0} }
-      @keyframes t3 { 0%,27.9%{width:0} 38.6%,89.3%{width:740px} 89.4%,100%{width:0} }
-      @keyframes t4 { 0%,40%{width:0}   61.4%,89.3%{width:740px} 89.4%,100%{width:0} }
-      @keyframes t5 { 0%,62.9%{width:0} 73.6%,89.3%{width:740px} 89.4%,100%{width:0} }
-
-      .caret { animation: blink 1s steps(1) infinite; }
-      @keyframes blink { 0%,49%{opacity:1} 50%,100%{opacity:0} }
-
-      .scan { animation: sweep 6s linear infinite; }
-      @keyframes sweep { 0%{transform:translateY(0)} 100%{transform:translateY(270px)} }
-
-      @media (prefers-reduced-motion: reduce) {
-        .type { width: 740px; animation: none; }
-        .caret, .scan { animation: none; }
-      }
-    </style>
+    <!-- One mask per line. The rect's width grows = characters appearing.
+         width="740" is the static fallback: if animation is blocked, all text still shows. -->
+    <mask id="m1">
+      <rect x="40" y="0" width="740" height="270" fill="#fff">
+        <animate attributeName="width" values="0;0;740;740;0" keyTimes="0;0.036;0.143;0.893;1"
+                 dur="14s" repeatCount="indefinite"/>
+      </rect>
+    </mask>
+    <mask id="m2">
+      <rect x="40" y="0" width="740" height="270" fill="#fff">
+        <animate attributeName="width" values="0;0;740;740;0" keyTimes="0;0.157;0.264;0.893;1"
+                 dur="14s" repeatCount="indefinite"/>
+      </rect>
+    </mask>
+    <mask id="m3">
+      <rect x="40" y="0" width="740" height="270" fill="#fff">
+        <animate attributeName="width" values="0;0;740;740;0" keyTimes="0;0.279;0.386;0.893;1"
+                 dur="14s" repeatCount="indefinite"/>
+      </rect>
+    </mask>
+    <mask id="m4">
+      <rect x="40" y="0" width="740" height="270" fill="#fff">
+        <animate attributeName="width" values="0;0;740;740;0" keyTimes="0;0.4;0.614;0.893;1"
+                 dur="14s" repeatCount="indefinite"/>
+      </rect>
+    </mask>
+    <mask id="m5">
+      <rect x="40" y="0" width="740" height="270" fill="#fff">
+        <animate attributeName="width" values="0;0;740;740;0" keyTimes="0;0.629;0.736;0.893;1"
+                 dur="14s" repeatCount="indefinite"/>
+      </rect>
+    </mask>
   </defs>
 
   <!-- animated gradient frame -->
@@ -67,10 +64,10 @@
   <circle cx="26" cy="21" r="6" fill="#FF5F56"/>
   <circle cx="46" cy="21" r="6" fill="#FFBD2E"/>
   <circle cx="66" cy="21" r="6" fill="#27C93F"/>
-  <text class="mono" x="92" y="26" font-size="13" fill="#6E7681">phihung@ai — ~/agents</text>
+  <text x="92" y="26" font-family="Consolas, 'SF Mono', monospace" font-size="13" fill="#6E7681">phihung@ai — ~/agents</text>
 
   <!-- typed lines -->
-  <g class="mono" font-size="16">
+  <g font-family="'Fira Code', 'JetBrains Mono', Consolas, monospace" font-size="16">
     <text x="40" y="76" fill="#C9D1D9" mask="url(#m1)">
       <tspan fill="#3FB950">$</tspan> ./deploy_agent.sh --model opus
     </text>
@@ -89,9 +86,15 @@
 
     <!-- prompt + blinking caret -->
     <text x="40" y="238" font-size="16" fill="#3FB950">$</text>
-    <rect class="caret" x="56" y="226" width="9" height="16" fill="#36BCF7"/>
+    <rect x="56" y="226" width="9" height="16" fill="#36BCF7">
+      <animate attributeName="opacity" values="1;1;0;0" keyTimes="0;0.49;0.5;1"
+               dur="1s" repeatCount="indefinite"/>
+    </rect>
   </g>
 
   <!-- scanline sweep -->
-  <rect class="scan" x="4" y="0" width="812" height="2" fill="#36BCF7" opacity="0.12"/>
+  <rect x="4" y="0" width="812" height="2" fill="#36BCF7" opacity="0.12">
+    <animateTransform attributeName="transform" type="translate" values="0 0;0 270"
+                      dur="6s" repeatCount="indefinite"/>
+  </rect>
 </svg>

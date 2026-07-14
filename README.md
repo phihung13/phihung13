@@ -1,6 +1,6 @@
 <!-- ═══════════════════ HEADER ═══════════════════ -->
 <div align="center">
-  <img width="100%" src="https://capsule-render.vercel.app/api?type=waving&color=0:0f2027,50:203a43,100:2c5364&height=220&section=header&text=Nguyen%20Phi%20Hung&fontSize=52&fontColor=ffffff&fontAlignY=36&desc=AI%20%E2%80%A2%20Automation%20%E2%80%A2%20Software&descAlignY=58&descSize=18&animation=fadeIn" alt="header"/>
+  <img width="100%" src="https://capsule-render.vercel.app/api?type=waving&color=0:0f2027,100:36BCF7&height=220&section=header&text=Nguyen%20Phi%20Hung&fontSize=52&fontColor=ffffff&fontAlignY=36&desc=AI%20%7C%20Automation%20%7C%20Software&descAlignY=58&descSize=18&animation=fadeIn" alt="header"/>
 </div>
 
 <div align="center">
@@ -22,8 +22,6 @@
 <br/>
 
 <!-- ═══════════════════ ABOUT ═══════════════════ -->
-<img align="right" width="330" src="https://raw.githubusercontent.com/gist/rahuldkjain/e4ba0f5cbc42d8f9dd8ba05dc270aef7/raw/coding.gif" alt="coding"/>
-
 ### 🧠 whoami
 
 ```python
@@ -43,8 +41,6 @@ class PhiHung:
 - ⚙️ Automating **Zalo, Facebook, Excel, HR & NDT workflows**
 - 🔌 Playing with **IoT, Jetson Nano, Arduino, self-driving cars**
 - 💬 Ask me about **Python, YOLO, OpenCV, LangChain, n8n, Supabase**
-
-<br clear="right"/>
 
 <!-- ═══════════════════ STACK ═══════════════════ -->
 ## 🛠️ Tech Arsenal
@@ -105,11 +101,6 @@ class PhiHung:
 ## 📊 GitHub Stats
 
 <div align="center">
-  <img height="165" src="https://github-readme-stats.vercel.app/api?username=phihung13&show_icons=true&include_all_commits=true&count_private=true&theme=tokyonight&hide_border=true&bg_color=0D1117&title_color=36BCF7&icon_color=36BCF7" alt="stats"/>
-  <img height="165" src="https://github-readme-stats.vercel.app/api/top-langs/?username=phihung13&layout=compact&langs_count=8&theme=tokyonight&hide_border=true&bg_color=0D1117&title_color=36BCF7" alt="langs"/>
-</div>
-
-<div align="center">
   <img src="https://streak-stats.demolab.com?user=phihung13&theme=tokyonight&hide_border=true&background=0D1117&ring=36BCF7&fire=36BCF7&currStreakLabel=36BCF7" alt="streak"/>
 </div>
 
@@ -118,7 +109,8 @@ class PhiHung:
 </div>
 
 <div align="center">
-  <img src="https://github-profile-trophy.vercel.app/?username=phihung13&theme=tokyonight&no-frame=true&no-bg=true&column=7&margin-w=6&margin-h=6" alt="trophies"/>
+  <img width="49%" src="https://raw.githubusercontent.com/phihung13/phihung13/main/metrics/metrics.svg" alt="metrics"/>
+  <img width="49%" src="https://raw.githubusercontent.com/phihung13/phihung13/main/metrics/achievements.svg" alt="achievements"/>
 </div>
 
 <!-- ═══════════════════ 3D CITY ═══════════════════ -->
@@ -152,17 +144,17 @@ class PhiHung:
 </div>
 
 <!-- ═══════════════════ METRICS ═══════════════════ -->
-## 🧭 Deep Metrics
+## 🧭 A Year of Commits, Isometric
 
 <div align="center">
-  <img width="49%" src="https://raw.githubusercontent.com/phihung13/phihung13/main/metrics/metrics.svg" alt="metrics"/>
-  <img width="49%" src="https://raw.githubusercontent.com/phihung13/phihung13/main/metrics/isocalendar.svg" alt="isocalendar"/>
+  <img width="70%" src="https://raw.githubusercontent.com/phihung13/phihung13/main/metrics/isocalendar.svg" alt="isocalendar"/>
 </div>
 
 <!-- ═══════════════════ CONTACT ═══════════════════ -->
 ## 🌐 Find Me
 
 <div align="center">
+  <a href="https://www.linkedin.com/in/hungphi"><img src="https://img.shields.io/badge/LinkedIn-0A66C2?style=for-the-badge&logo=linkedin&logoColor=white" alt="linkedin"/></a>
   <a href="mailto:phihung13102@gmail.com"><img src="https://img.shields.io/badge/Gmail-EA4335?style=for-the-badge&logo=gmail&logoColor=white" alt="gmail"/></a>
   <a href="https://github.com/phihung13"><img src="https://img.shields.io/badge/GitHub-181717?style=for-the-badge&logo=github&logoColor=white" alt="github"/></a>
 </div>
@@ -174,5 +166,5 @@ class PhiHung:
 </div>
 
 <div align="center">
-  <img width="100%" src="https://capsule-render.vercel.app/api?type=waving&color=0:2c5364,50:203a43,100:0f2027&height=140&section=footer" alt="footer"/>
+  <img width="100%" src="https://capsule-render.vercel.app/api?type=waving&color=0:36BCF7,100:0f2027&height=140&section=footer" alt="footer"/>
 </div>
