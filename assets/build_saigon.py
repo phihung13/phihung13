@@ -1013,10 +1013,17 @@ for band in range(NBANDS):
             out.write(_layers[depth].svg.getvalue())
 
 wrecked = len(collapsed) + len(charred) + len(craters)
-status = (f'SAIGON · nguyen ven · {len(EVENTS)} tham hoa'
-          if wrecked == 0 else
-          f'SAIGON · {wrecked} cong trinh do nat · {len(cracked)} doan duong hu · '
-          f'{len(flooded)} o ngap · {len(EVENTS)} tham hoa')
+if not EVENTS:
+    status = "SAIGON · nguyen ven"
+else:
+    bits = []
+    if wrecked:
+        bits.append(f"{wrecked} cong trinh do nat")
+    if cracked or craters:
+        bits.append(f"{len(cracked) + len(craters)} doan duong hu")
+    if flooded:
+        bits.append(f"{len(flooded)} o ngap")
+    status = f"SAIGON · {' · '.join(bits) or 'con nguyen'} · {len(EVENTS)} tham hoa"
 out.write(
     f'<rect x="0" y="{CH-34}" width="{CW}" height="34" fill="#2b2823" opacity="0.55"/>'
     f'<text x="26" y="{CH-12}" font-family="monospace" font-size="14" fill="#e0d8c8">'
