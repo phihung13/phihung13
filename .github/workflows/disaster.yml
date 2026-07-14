@@ -1,0 +1,68 @@
+name: Disaster
+
+# Somebody pressed a button in the README. A button is just a link that opens an issue
+# titled "disaster:<kind>" — this workflow reads it, wrecks the city, redraws the map,
+# and commits it. The damage is permanent until someone presses Reset.
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: disaster            # two disasters must not rewrite the map at the same time
+  cancel-in-progress: false
+
+jobs:
+  strike:
+    if: startsWith(github.event.issue.title, 'disaster:')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Apply the disaster and redraw the city
+        id: apply
+        env:
+          TITLE: ${{ github.event.issue.title }}
+          NUMBER: ${{ github.event.issue.number }}
+        run: |
+          python assets/apply_event.py "$TITLE" "$NUMBER" >> "$GITHUB_OUTPUT"
+          python assets/build_saigon.py
+
+      - name: Commit the new map
+        if: steps.apply.outputs.ignored == 'false'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/state.json assets/saigon.svg
+          git commit -m "${{ steps.apply.outputs.kind }} (#${{ github.event.issue.number }})" || exit 0
+          git push
+
+      - name: Reply on the issue and close it
+        if: steps.apply.outputs.ignored == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue comment "${{ github.event.issue.number }}" --body \
+            "${{ steps.apply.outputs.headline }}
+
+          Bản đồ đã được vẽ lại — quay về [trang chủ](https://github.com/phihung13) xem hậu quả (có thể phải Ctrl+F5, GitHub cache ảnh vài phút).
+
+          Tổng cộng thành phố đã hứng **${{ steps.apply.outputs.total }}** thảm hoạ. Muốn xây lại thì bấm nút ♻️ Reset."
+          gh issue close "${{ github.event.issue.number }}"
+
+      - name: Close anything that isn't a real disaster
+        if: steps.apply.outputs.ignored == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue comment "${{ github.event.issue.number }}" --body \
+            "Không nhận ra thảm hoạ này. Dùng các nút ở README nhé."
+          gh issue close "${{ github.event.issue.number }}"

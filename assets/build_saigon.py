@@ -1,13 +1,25 @@
 # -*- coding: utf-8 -*-
-"""Sài Gòn isometric v5.
+"""Sài Gòn isometric — a city you can wreck from a README button.
 
-The fix that matters: every moving vehicle is CUT INTO SEGMENTS BY DEPTH, and each segment is
-emitted into the same depth bucket as the houses around it. A house nearer the camera therefore
-paints over the segment behind it — no more traffic flying above the rooftops.
+Two things worth knowing:
+
+1. Every moving vehicle is CUT INTO SEGMENTS BY DEPTH, and each segment is emitted into the same
+   depth bucket as the houses around it. A house nearer the camera therefore paints over the
+   segment behind it — traffic never flies above the rooftops.
+
+2. The damage is a pure function of state.json. Every disaster is just an (kind, seed) pair;
+   what it destroys is derived deterministically from that seed. So the map can always be rebuilt
+   from scratch, and "reset" simply means throwing the event list away.
 """
 import io
+import json
 import math
+import os
 from collections import defaultdict
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+STATE_PATH = os.path.join(HERE, "state.json")
+OUT_PATH = os.path.join(HERE, "saigon.svg")
 
 TW, TH, ZH = 104, 66, 25          # bigger blocks: fewer of them, and detail survives downscaling
 # the iso diamond must be big enough to cover the RECTANGLE's corners, not just its middle:
@@ -41,6 +53,14 @@ TREE, TREE_D, TRUNK = "#57813f", "#3b5c31", "#5f4a33"
 SIGNS = ["#b03e2c", "#3a6491", "#c78d24", "#3f7d52", "#8f4d80", "#2a7076"]
 GLASS, FRAME, RAIL = "#5a6c7d", "#e9e3d3", "#8f8878"
 GOV = ("#e0c877", "#bda75d", "#efdfa4")
+
+# ── the colours of a bad day ─────────────────────────────────────────
+RUBBLE_A, RUBBLE_B, RUBBLE_C = "#a89f8f", "#8c8474", "#6f6a5f"
+CHAR_A, CHAR_B, CHAR_C = "#5c534b", "#443d37", "#6e6459"
+EMBER = "#d8632c"
+CRATER_A, CRATER_B = "#4a453e", "#332f2a"
+WATER, WATER_HI = "#4b7f9e", "#7fb0c8"
+SMOKE = "#b9b3a8"
 
 road = [[False] * GRID for _ in range(GRID)]
 taken = [[False] * GRID for _ in range(GRID)]
@@ -120,6 +140,91 @@ road = wide
 
 def is_road(x, y):
     return 0 <= x < GRID and 0 <= y < GRID and road[y][x]
+
+
+# ═══ DISASTERS ═══════════════════════════════════════════════════════
+# state.json = {"events": [{"kind": "...", "seed": 123}, ...]}. Nothing else is stored:
+# what each event destroys is derived from its seed, so the map is always reproducible.
+if os.path.exists(STATE_PATH):
+    # utf-8-sig: tolerate a BOM, which some editors add and json.load chokes on.
+    # A malformed state file is a bug worth shouting about, not silently ignoring.
+    with open(STATE_PATH, encoding="utf-8-sig") as f:
+        STATE = json.load(f)
+else:
+    STATE = {"events": []}
+EVENTS = STATE.get("events", [])
+
+collapsed = set()      # nhà sập thành đống gạch vụn  (earthquake, war)
+charred = set()        # nhà cháy đen, còn bốc khói    (lightning)
+craters = set()        # hố bom, mất luôn cả mặt đường (war)
+cracked = set()        # đường nứt toác                (earthquake)
+flooded = set()        # ngập nước                     (flood)
+
+
+def pick_cells(seed, n, want_road=False):
+    """deterministic scatter of cells, walking a coprime stride across the grid"""
+    out_cells, k = [], (seed * 7919) % (GRID * GRID)
+    stride = 3517                                     # coprime with GRID*GRID for a full tour
+    for _ in range(GRID * GRID):
+        gx, gy = k % GRID, k // GRID
+        k = (k + stride) % (GRID * GRID)
+        if not on_screen_cell(gx, gy):
+            continue
+        if road[gy][gx] == want_road:
+            out_cells.append((gx, gy))
+            if len(out_cells) >= n:
+                break
+    return out_cells
+
+
+def on_screen_cell(gx, gy):
+    x = OX + (gx - gy) * (TW / 2) + TW / 2
+    y = OY + (gx + gy) * (TH / 2) + TH / 2
+    return -60 < x < CW + 60 and -60 < y < CH + 60
+
+
+for ev in EVENTS:
+    kind, seed = ev.get("kind", ""), int(ev.get("seed", 1))
+
+    if kind == "earthquake":                    # ĐỘNG ĐẤT: sập rải rác + nứt đường
+        for c in pick_cells(seed, 9):
+            collapsed.add(c)
+        for c in pick_cells(seed + 31, 7, want_road=True):
+            cracked.add(c)
+
+    elif kind == "lightning":                   # SẤM SÉT: vài nhà trúng sét, cháy đen
+        for c in pick_cells(seed + 7, 4):
+            charred.add(c)
+
+    elif kind == "war":                         # TÊN LỬA: hố bom + san phẳng quanh điểm rơi
+        for (ex, ey) in pick_cells(seed + 13, 2):
+            craters.add((ex, ey))
+            for dx in (-1, 0, 1):
+                for dy in (-1, 0, 1):
+                    cx_, cy_ = ex + dx, ey + dy
+                    if not (0 <= cx_ < GRID and 0 <= cy_ < GRID):
+                        continue
+                    if road[cy_][cx_]:
+                        if abs(dx) + abs(dy) <= 1:
+                            craters.add((cx_, cy_))
+                    elif abs(dx) + abs(dy) <= 1:
+                        collapsed.add((cx_, cy_))
+                    elif (dx + dy + seed) % 2 == 0:
+                        charred.add((cx_, cy_))
+
+    elif kind == "flood":
+        # THỦY TRIỀU: nước dâng từ mép dưới khung hình lên. Tính theo toạ độ MÀN HÌNH, không
+        # phải chỉ số lưới — các ô "phía trước" của lưới phần lớn nằm ngoài khung.
+        tides = sum(1 for e in EVENTS if e.get("kind") == "flood")
+        waterline = CH - 150 * tides            # mỗi con nước lại dâng cao thêm
+        for gy in range(GRID):
+            for gx in range(GRID):
+                y = OY + (gx + gy) * (TH / 2) + TH / 2
+                if y >= waterline and on_screen_cell(gx, gy):
+                    flooded.add((gx, gy))
+
+collapsed -= craters
+charred -= collapsed | craters
 
 
 def free(gx, gy, w, d):
@@ -221,13 +326,88 @@ for gx, gy, k in ((7, 6, 0), (5, 10, 1), (12, 9, 0), (8, 21, 1), (16, 4, 0), (17
 head.write("\n")
 
 
+# ═══ ruins ═══════════════════════════════════════════════════════════
+def rubble(buf, gx, gy, seed):
+    """what a house becomes: stumps of wall, a heap of debris, dust still hanging"""
+    N, E, S, W = C(gx, gy), C(gx + 1, gy), C(gx + 1, gy + 1), C(gx, gy + 1)
+    P(buf, [N, E, S, W], "#8f8878")                                  # bare foundation
+    for i, (u, hh) in enumerate(((0.10, 26), (0.42, 14), (0.78, 22))):
+        A, B = (S, E) if i % 2 else (W, S)
+        panel(buf, A, B, u, u + 0.16, 0, hh, RUBBLE_A if i % 2 else RUBBLE_B)
+        panel(buf, A, B, u, u + 0.16, hh - 3, hh, RUBBLE_C)
+    c = mid(gx, gy)
+    for k in range(9):
+        ox = -34 + ((seed * (k + 3) * 17) % 68)
+        oy = -6 + ((seed * (k + 5) * 11) % 22)
+        s = 5 + ((seed * (k + 7)) % 9)
+        col = (RUBBLE_A, RUBBLE_B, RUBBLE_C)[(seed + k) % 3]
+        P(buf, [(c[0] + ox, c[1] + oy), (c[0] + ox + s, c[1] + oy - s * 0.6),
+                (c[0] + ox + 2 * s, c[1] + oy), (c[0] + ox + s, c[1] + oy + s * 0.6)], col)
+    for k in range(3):
+        buf.write(f'<circle cx="{c[0]-18+k*16:.0f}" cy="{c[1]-30-k*10:.0f}" r="{9+k*3}" '
+                  f'fill="{SMOKE}" opacity="0.18">'
+                  f'<animate attributeName="opacity" values="0.05;0.22;0.05" dur="{5+k}s" '
+                  f'begin="{k}s" repeatCount="indefinite"/></circle>')
+
+
+def crater(buf, gx, gy, seed):
+    """where the missile landed: the street is simply gone"""
+    c = mid(gx, gy)
+    P(buf, [(c[0] - 46, c[1]), (c[0], c[1] - 28), (c[0] + 46, c[1]), (c[0], c[1] + 28)], CRATER_A)
+    P(buf, [(c[0] - 30, c[1]), (c[0], c[1] - 18), (c[0] + 30, c[1]), (c[0], c[1] + 18)], CRATER_B)
+    for k in range(7):
+        ox = -50 + ((seed * (k + 2) * 13) % 100)
+        oy = -20 + ((seed * (k + 4) * 7) % 40)
+        s = 4 + ((seed + k) % 6)
+        P(buf, [(c[0] + ox, c[1] + oy), (c[0] + ox + s, c[1] + oy - s * 0.6),
+                (c[0] + ox + 2 * s, c[1] + oy), (c[0] + ox + s, c[1] + oy + s * 0.6)], RUBBLE_C)
+    buf.write(f'<ellipse cx="{c[0]:.0f}" cy="{c[1]-6:.0f}" rx="26" ry="14" fill="{EMBER}" '
+              f'opacity="0.25"><animate attributeName="opacity" values="0.10;0.30;0.10" dur="2.2s" '
+              f'repeatCount="indefinite"/></ellipse>')
+    for k in range(3):
+        buf.write(f'<circle cx="{c[0]-10+k*12:.0f}" cy="{c[1]-40-k*22:.0f}" r="{12+k*5}" '
+                  f'fill="{SMOKE}" opacity="0.22">'
+                  f'<animate attributeName="opacity" values="0.06;0.28;0.06" dur="{4+k}s" '
+                  f'begin="{k*0.8}s" repeatCount="indefinite"/></circle>')
+
+
+def crack(buf, gx, gy, seed):
+    """a fault line torn across the asphalt"""
+    c = mid(gx, gy)
+    pts = []
+    for k in range(6):
+        t = k / 5
+        jitter = -8 + ((seed * (k + 3) * 19) % 16)
+        pts.append((c[0] - 48 + 96 * t, c[1] - 28 + 56 * t + jitter))
+    dpath = "M" + " L".join(f"{x:.0f},{y:.0f}" for x, y in pts)
+    buf.write(f'<path d="{dpath}" fill="none" stroke="{CRATER_B}" stroke-width="7" '
+              f'stroke-linejoin="round"/>'
+              f'<path d="{dpath}" fill="none" stroke="#231f1c" stroke-width="3"/>')
+
+
+def water(buf, gx, gy, seed):
+    """the tide, sitting above the street and lapping at the walls"""
+    LEV = 12
+    N, E = (C(gx, gy)[0], C(gx, gy)[1] - LEV), (C(gx + 1, gy)[0], C(gx + 1, gy)[1] - LEV)
+    S, W = (C(gx + 1, gy + 1)[0], C(gx + 1, gy + 1)[1] - LEV), (C(gx, gy + 1)[0], C(gx, gy + 1)[1] - LEV)
+    P(buf, [N, E, S, W], WATER, 0.72)
+    c = mid(gx, gy)
+    for k in range(2):
+        buf.write(f'<ellipse cx="{c[0]-20+k*34:.0f}" cy="{c[1]-LEV+2+k*8:.0f}" rx="14" ry="4" '
+                  f'fill="{WATER_HI}" opacity="0.25">'
+                  f'<animate attributeName="opacity" values="0.08;0.35;0.08" dur="{3+k}s" '
+                  f'begin="{(seed+k)%3}s" repeatCount="indefinite"/></ellipse>')
+
+
 # ═══ a house ═════════════════════════════════════════════════════════
-def house(buf, gx, gy, w, d, seed, kind="house"):
+def house(buf, gx, gy, w, d, seed, kind="house", burnt=False):
     N, E, S, W = C(gx, gy), C(gx + w, gy), C(gx + w, gy + d), C(gx, gy + d)
     floors = 1 + rnd(seed + 3, 5) if kind == "house" else 3
     fh = ZH - 2 + rnd(seed + 31, 5)
     h = floors * fh + 8 + rnd(seed + 7, 10)
     r, l, t = (GOV if kind == "gov" else FACADES[rnd(seed + 5, len(FACADES))])
+    if burnt:                                   # struck by lightning: scorched to the bone
+        r, l, t = CHAR_C, CHAR_B, CHAR_A
 
     P(buf, [(N[0] + 10, N[1] + 6), (E[0] + 10, E[1] + 6),
             (S[0] + 10, S[1] + 6), (W[0] + 10, W[1] + 6)], "#5a5346", 0.16)
@@ -354,6 +534,18 @@ def house(buf, gx, gy, w, d, seed, kind="house"):
             L(buf, (rc[0] - 22, rcy - 6), (rc[0] - 22, rcy - 32), RAIL, 1)
             L(buf, (rc[0] - 27, rcy - 27), (rc[0] - 17, rcy - 27), RAIL, 1)
 
+    if burnt:                                   # smoke still pouring off the roof, embers inside
+        for k in range(4):
+            buf.write(f'<circle cx="{rc[0]-14+k*11:.0f}" cy="{rcy-18-k*20:.0f}" r="{10+k*5}" '
+                      f'fill="{SMOKE}" opacity="0.22">'
+                      f'<animate attributeName="opacity" values="0.05;0.30;0.05" dur="{4+k}s" '
+                      f'begin="{k*0.7}s" repeatCount="indefinite"/></circle>')
+        for A, B in ((S, E), (W, S)):
+            panel(buf, A, B, 0.30, 0.55, 18, 34, EMBER, 0.55)
+        buf.write(f'<ellipse cx="{rc[0]:.0f}" cy="{rcy+4:.0f}" rx="22" ry="10" fill="{EMBER}" '
+                  f'opacity="0.30"><animate attributeName="opacity" values="0.12;0.42;0.12" '
+                  f'dur="1.8s" repeatCount="indefinite"/></ellipse>')
+
     if kind == "gov":
         fx0, fy0 = rc[0], rcy - 8
         L(buf, (fx0, fy0), (fx0, fy0 - 40), RAIL, 2)
@@ -467,9 +659,17 @@ for depth in range(2 * GRID):
             continue
         seed = gx * 37 + gy * 19 + 5
 
+        if (gx, gy) in craters:                       # nothing left to draw here
+            occupy(gx, gy, 1, 1)
+            continue
+        if (gx, gy) in collapsed:
+            occupy(gx, gy, 1, 1)
+            rubble(buf, gx, gy, seed)
+            continue
+
         if (gx, gy) == GOV_AT and free(gx, gy, 2, 2):
             occupy(gx, gy, 2, 2)
-            house(buf, gx, gy, 2, 2, seed, kind="gov")
+            house(buf, gx, gy, 2, 2, seed, kind="gov", burnt=(gx, gy) in charred)
             continue
         if rnd(seed, 12) == 0:                       # sân vườn
             b = mid(gx, gy)
@@ -485,7 +685,21 @@ for depth in range(2 * GRID):
         if not free(gx, gy, w, d):
             w = d = 1
         occupy(gx, gy, w, d)
-        house(buf, gx, gy, w, d, seed)
+        house(buf, gx, gy, w, d, seed, burnt=(gx, gy) in charred)
+
+    # craters, cracks and floodwater sit at ground level of this same depth row,
+    # so the houses in the row in front will still paint over them
+    for gx in range(GRID):
+        gy = depth - gx
+        if not (0 <= gy < GRID) or not on_screen(gx, gy):
+            continue
+        s = gx * 7 + gy * 13 + 3
+        if (gx, gy) in craters:
+            crater(buf, gx, gy, s)
+        elif (gx, gy) in cracked:
+            crack(buf, gx, gy, s)
+        if (gx, gy) in flooded:
+            water(buf, gx, gy, s)
 
 # ═══ sidewalk life — also bucketed, so houses can hide it ════════════
 for gy in range(GRID):
@@ -594,8 +808,19 @@ def draw_bus(color):
     return s
 
 
+def lane_blocked(cells):
+    """A crater swallows the road, so nothing gets through. Floodwater doesn't stop anyone —
+    this is Saigon; people just ride through it."""
+    for gx, gy in cells:
+        if (int(math.floor(gx)), int(math.floor(gy))) in craters:
+            return True
+    return False
+
+
 def emit_traffic(cells, shape_svg, dur, phase, stops_at=None):
     """Cut the ride into depth slices; each slice is drawn with the houses at that depth."""
+    if lane_blocked(cells):
+        return
     pts = lane_points(cells)
     segs = []
     for i in range(len(pts) - 1):
@@ -726,11 +951,19 @@ out = io.StringIO()
 out.write(head.getvalue())
 for depth in sorted(layers):
     out.write(layers[depth].getvalue())
+wrecked = len(collapsed) + len(charred) + len(craters)
+status = (f'SAIGON · nguyen ven · {len(EVENTS)} tham hoa'
+          if wrecked == 0 else
+          f'SAIGON · {wrecked} cong trinh do nat · {len(cracked)} doan duong hu · '
+          f'{len(flooded)} o ngap · {len(EVENTS)} tham hoa')
 out.write(
-    f'<text x="26" y="{CH-24}" font-family="monospace" font-size="14" fill="#6b6459">'
-    f'SAIGON · 8,000,000 concurrent workers · uptime 326y · maintainer: phihung13</text>\n</svg>\n'
+    f'<rect x="0" y="{CH-34}" width="{CW}" height="34" fill="#2b2823" opacity="0.55"/>'
+    f'<text x="26" y="{CH-12}" font-family="monospace" font-size="14" fill="#e0d8c8">'
+    f'{status} · maintainer: phihung13</text>\n</svg>\n'
 )
 
-with open("saigon-iso6.svg", "w", encoding="utf-8") as f:
+with open(OUT_PATH, "w", encoding="utf-8") as f:
     f.write(out.getvalue())
-print("written:", len(out.getvalue()), "bytes")
+print(f"written: {len(out.getvalue())} bytes | events={len(EVENTS)} "
+      f"collapsed={len(collapsed)} charred={len(charred)} craters={len(craters)} "
+      f"cracked={len(cracked)} flooded={len(flooded)}")
