@@ -7,6 +7,10 @@
     {
       "kind": "earthquake",
       "seed": 2
+    },
+    {
+      "kind": "war",
+      "seed": 3
     }
   ]
 }
